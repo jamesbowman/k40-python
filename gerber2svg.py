@@ -89,23 +89,18 @@ class GerberShape(Gerber):
     def finish(self, _):
         self.p = sg.Polygon([p.tuple() for p in self.poly])
 
-class GerberSVG(GerberShape):
+class Shape:
     def dilate(self):
         self.p = self.p.buffer(0.1)
-
-    def rect(self, p0, p1):
-        a = Point(p1.x, p0.y)
-        b = Point(p0.x, p1.y)
-        self.line(p0, a)
-        self.line(a, p1)
-        self.line(p1, b)
-        self.line(b, p0)
 
     def frame(self, r):
         (x0, y0, x1, y1) = self.p.bounds
         self.p = sg.Polygon(
             [(x0-r, y0-r), (x0-r, y1+r), (x1+r, y1+r), (x1+r, y0-r)],
             [self.p.exterior])
+        for (x,y) in [(x0-r/2,y0-r/2), (x1+r/2,y0-r/2), (x1+r/2,y1+r/2), (x0-r/2,y1+r/2)]:
+            drill = sg.Point(x, y).buffer(1.2)
+            g.p = g.p.symmetric_difference(drill)
 
     def zero(self):
         (x0, y0, x1, y1) = self.p.bounds
@@ -115,15 +110,60 @@ class GerberSVG(GerberShape):
         self.zero()
         (_, _, x1, y1) = self.p.bounds
         dwg = svgwrite.Drawing(filename, size=('%fmm' % x1, '%fmm' % y1), viewBox=('0 0 %f %f' % (x1, y1)))
-        for lr in [self.p.exterior] + list(self.p.interiors):
-            dwg.add(dwg.polygon(list(lr.coords), stroke='red', fill_opacity=0.0, stroke_width=.1))
+        for p in [self.p]:
+            for lr in [p.exterior] + list(p.interiors):
+                dwg.add(dwg.polygon(list(lr.coords), stroke='red', fill_opacity=0.0, stroke_width=.1))
         dwg.save()
 
+def sh_frame(sh, r):
+    (x0, y0, x1, y1) = sh.bounds
+    sh = sg.Polygon(
+        [(x0-r, y0-r), (x0-r, y1+r), (x1+r, y1+r), (x1+r, y0-r)],
+        [sh.exterior])
+    for (x,y) in [(x0-r/2,y0-r/2), (x1+r/2,y0-r/2), (x1+r/2,y1+r/2), (x0-r/2,y1+r/2)]:
+        drill = sg.Point(x, y).buffer(1.2)
+        sh = sh.symmetric_difference(drill)
+    return sh
+
+def sh_zero(sh):
+    (x0, y0, x1, y1) = sh.bounds
+    return sa.translate(sh, -x0, -y0)
+
+def sh_write(filename, sh):
+    sh = sh_zero(sh)
+    (_, _, x1, y1) = sh.bounds
+    dwg = svgwrite.Drawing(filename, size=('%fmm' % x1, '%fmm' % y1), viewBox=('0 0 %f %f' % (x1, y1)))
+    for p in sh:
+        for lr in [p.exterior] + list(p.interiors):
+            dwg.add(dwg.polygon(list(lr.coords), stroke='red', fill_opacity=0.0, stroke_width=.1))
+    dwg.save()
+
+class GerberSVG(Gerber, GerberShape, Shape):
+    pass
+
+def plate(shrink = False, usb_slot = False):
+    if 0:
+        g = GerberSVG()
+        g.read(sys.argv[1])
+        g.dilate()
+    else:
+        sh = sg.box(0, 0, 61.85, 48.50)
+    sh = sh_zero(sh_frame(sh, 10))
+    if shrink:
+        i = list(sh.interiors)
+        sh = sg.Polygon(
+            sh.exterior,
+            [i[0].buffer(-0.9).exterior] + i[1:])
+    if usb_slot:
+        sh = sh.symmetric_difference(sg.box(0, 11, 7.5, 21))
+    return sh
+
+def sh_abut(a, b):
+    (_, _, x1, _) = a.bounds
+    return sa.translate(b, x1, 0)
+
 if __name__ == '__main__':
-    g = GerberSVG()
-    g.read(sys.argv[1])
-    g.dilate()
-    g.frame(10)
-    g.zero()
-    # g.addframe()
-    g.write('test.svg')
+    l0 = plate(usb_slot = True)
+    l1 = sh_abut(l0, plate(shrink = True))
+    a = sg.MultiPolygon([l0, l1])
+    sh_write('test.svg', a)
