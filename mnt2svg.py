@@ -2,9 +2,13 @@ import sys
 import re
 
 foots = {
-    'NX3225' : (2.5, 3.2),
+    'NX3225' : (3.2, 2.5),
     'VQFN48' : (7.0, 7.0),
-    'QFN20' :  (3.0, 3.0)
+    'EFM8BB10F(2/4/8)G-A-QFN20' :  (3.0, 3.0),
+    'SOT23-5' : (3.4, 3.2),
+    'C0805' : (2.0, 1.25),
+    'C0402K' : (1.0, 0.5),
+    'R0402' : (1.0, 0.5),
 }
 
 class Point:
@@ -29,9 +33,13 @@ class Mnt:
         self.lines = []
         self.allpoints = []
         for l in open(fn):
-            (part, x, y, angle, foot) = l.split()
+            ll = l.split()
+            (part, x, y, angle) = ll[:4]
+            foot = ll[-1]
             (x, y, angle) = [float(c) for c in (x, y, angle)]
             (w, h) = foots[foot]
+            if angle in (90, 270):
+                (w, h) = (h, w)
             self.part(Point(x, 70 - y), w, h)
 
     def line(self, p0, p1):
